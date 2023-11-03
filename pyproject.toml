@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "soundx"
+version = "0.1.0"
+description = ""
+authors = ["Julien Roullé <ju.roulle@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+tensorflow-macos = { version = "^2.14.0", markers = "platform_system=='Darwin' and platform_machine=='arm64'" }
+tensorflow = "^2.13.0"
+pandas = "^2.1.2"
+numpy = "^1.26.1"
+streamlit = "^1.28.1"
+boto3 = "^1.28.77"
+matplotlib = "^3.8.1"
+librosa = "^0.10.1"
+python-dotenv = "^1.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
