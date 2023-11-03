@@ -18,7 +18,7 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 client = boto3.client('s3', region_name='eu-west-3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_ACCESS_KEY, config=boto3.session.Config(signature_version='s3v4'))
 s3 = boto3.resource('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,)
-bucket = s3.Bucket("soundx-models")
+bucket = s3.Bucket("soundx-audio-dataset")
 
 @st.cache_data
 def load_data():

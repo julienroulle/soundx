@@ -23,7 +23,7 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 client = boto3.client('s3', region_name='eu-west-3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_ACCESS_KEY, config=boto3.session.Config(signature_version='s3v4'))
 s3 = boto3.resource('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,)
-bucket = s3.Bucket("soundx-audio-dataset")
+bucket = s3.Bucket("soundx-models")
 
 @st.cache_data
 def load_models():
@@ -53,22 +53,25 @@ url = client.generate_presigned_url(
         ExpiresIn=3600)
 content = BytesIO(requests.get(url).content)
 
-signal_wave = wave.open(content, 'r')
-frames = signal_wave.getnframes()
-rate = signal_wave.getframerate()
-samp_width = signal_wave.getsampwidth()
-n_channels = signal_wave.getnchannels()
-full_sig = np.frombuffer(signal_wave.readframes(frames), dtype=np.int16)
-sig = full_sig[::n_channels]
+try:
+    signal_wave = wave.open(content, 'r')
+    frames = signal_wave.getnframes()
+    rate = signal_wave.getframerate()
+    samp_width = signal_wave.getsampwidth()
+    n_channels = signal_wave.getnchannels()
+    full_sig = np.frombuffer(signal_wave.readframes(frames), dtype=np.int16)
+    sig = full_sig[::n_channels]
 
-with wave.open('/tmp/export.wav', 'w') as outfile:
-    outfile.setnchannels(n_channels)
-    outfile.setsampwidth(samp_width)
-    outfile.setframerate(rate)
-    outfile.setnframes(int(len(full_sig) / samp_width))
-    outfile.writeframes(full_sig)
+    with wave.open('/tmp/export.wav', 'w') as outfile:
+        outfile.setnchannels(n_channels)
+        outfile.setsampwidth(samp_width)
+        outfile.setframerate(rate)
+        outfile.setnframes(int(len(full_sig) / samp_width))
+        outfile.writeframes(full_sig)
 
-duration = frames / float(rate)
+    duration = frames / float(rate)
+except wave.Error:
+    sig = []
 
 # create waveform plot
 fig = plt.figure(figsize=(10, 3))
