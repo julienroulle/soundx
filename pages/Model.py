@@ -120,12 +120,10 @@ def soundx_tflite_prediction(waveform, tflite_model='/tmp/soundx_model.tflite'):
     sorted_scores_indices = np.argsort(scores)[::-1]
     return scores, sorted_scores_indices
 
-sr = 44100
-signal, sr = librosa.load('/tmp/export.wav', sr=sr)
 target_sr = 16000
+resampled_signal, sr = librosa.load('/tmp/export.wav', sr=target_sr)
 
 tflite_model = client.download_file(Bucket='soundx-models', Key=f'{model}/soundx_model.tflite', Filename='/tmp/soundx_model.tflite')
-resampled_signal = librosa.resample(signal, orig_sr=sr, target_sr=target_sr)
 scores, scores_idx = soundx_tflite_prediction(resampled_signal)
 
 predictions_columns = st.columns([3, 2, 3, 3])

@@ -26,6 +26,9 @@ accelerate = "^0.24.1"
 transformers = "^4.35.2"
 tensorflow = "^2.15.0"
 
+[tool.poetry.group.dev.dependencies]
+tensorflow-macos = "^2.15.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
