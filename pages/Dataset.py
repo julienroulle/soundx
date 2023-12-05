@@ -4,9 +4,6 @@ from collections import defaultdict
 import boto3
 
 import pandas as pd
-import json
-import numpy as np
-
 
 from dotenv import find_dotenv, load_dotenv
 import os
@@ -42,4 +39,5 @@ for label in files.keys():
     # st.write(df)
     summary = pd.concat([summary, df], axis=0)
 
-st.dataframe(summary, )
+summary = summary.sort_values(by=['num_files'])
+st.dataframe(summary)
