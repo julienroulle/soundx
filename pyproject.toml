@@ -24,9 +24,7 @@ torchvision = "^0.16.1"
 torchaudio = "^2.1.1"
 accelerate = "^0.24.1"
 transformers = "^4.35.2"
-
-[tool.poetry.group.dev.dependencies]
-tensorflow-macos = "^2.15.0"
+tensorflow = "^2.15.0"
 
 [build-system]
 requires = ["poetry-core"]
