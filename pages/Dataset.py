@@ -17,7 +17,7 @@ client = boto3.client('s3', region_name='eu-west-3', aws_access_key_id=AWS_ACCES
 s3 = boto3.resource('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_ACCESS_KEY,)
 bucket = s3.Bucket("soundx-audio-dataset")
 
-@st.cache_data
+@st.cache_data(ttl=600)
 def load_data():
     files = defaultdict(list)
     for obj in bucket.objects.all():

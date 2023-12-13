@@ -25,7 +25,7 @@ s3 = boto3.resource('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_ke
 model_bucket = s3.Bucket("soundx-models")
 dataset_bucket = s3.Bucket("soundx-audio-dataset")
 
-@st.cache_data
+@st.cache_data(ttl=600)
 def load_models():
     models = dict()
     for obj in model_bucket.objects.all():
@@ -35,7 +35,7 @@ def load_models():
             models[model_date] = model_path
     return models
 
-@st.cache_data
+@st.cache_data(ttl=600)
 def load_data():
     files = defaultdict(list)
     for obj in dataset_bucket.objects.all():
