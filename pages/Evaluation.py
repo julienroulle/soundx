@@ -138,12 +138,17 @@ def generate_result_dataframe():
 
         specific_label = specific_classes[specific_scores_idx[0]]
 
+        if file[:-4] == specific_label:
+            certainty = scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
+        else:
+            certainty = 0
+
         s = pd.DataFrame(
             [
                 file,
                 general_label,
                 specific_label,
-                scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100,
+                certainty,
             ],
             index=df.columns,
         )
