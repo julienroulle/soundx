@@ -110,9 +110,9 @@ for model_class in classes:
 
 target_sr = 16000
 
+
 @st.cache_data(ttl=3600)
 def generate_result_dataframe():
-    
     df = pd.DataFrame(
         columns=["File", "General label", "Specific label", "Prediction certainty"]
     )
@@ -139,9 +139,15 @@ def generate_result_dataframe():
         specific_label = specific_classes[specific_scores_idx[0]]
 
         if file[:-4] == specific_label:
-            certainty = scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
+            certainty = (
+                scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
+            )
         else:
-            certainty = 0
+            tmp_classes = np.array(specific_classes)[specific_scores_idx]
+            idx = np.where(tmp_classes == specific_label)[0][0]
+            certainty = (
+                scores[scores_idx[0]] * specific_scores[idx] * 100
+            )
 
         s = pd.DataFrame(
             [
@@ -154,6 +160,7 @@ def generate_result_dataframe():
         )
         df = pd.concat([df, s.T], axis=0)
     return df
+
 
 df = generate_result_dataframe()
 st.write(df)
