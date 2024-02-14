@@ -58,9 +58,17 @@ dataset_bucket = s3.Bucket("soundx-audio-dataset")
 
 
 @st.cache_data(ttl=3600)
-def load_data():
+def load_folders():
+    folders = list()
+    for obj in dataset_bucket.objects.all():
+        folders.append(obj.key.split("/")[0])
+    return sorted(list(set(folders)))
+
+@st.cache_data(ttl=3600)
+def load_data(folder=":TESTS"):
+    print(folder)
     files = list()
-    for obj in dataset_bucket.objects.filter(Prefix=":TESTS"):
+    for obj in dataset_bucket.objects.filter(Prefix=folder):
         if obj.key.endswith(".wav"):
             label, file = obj.key.split("/")[0], obj.key.split("/")[1]
             url = client.generate_presigned_url(
@@ -85,8 +93,11 @@ def load_data():
             files.append(file)
     return files
 
+folders = load_folders()
 
-files = load_data()
+folder = st.selectbox("Select a class", folders, index=folders.index(":TESTS"))
+
+files = load_data(folder)
 
 classes = json.loads(
     s3.Object("soundx-models", "latest/soundx_model_general.json")
@@ -111,8 +122,8 @@ for model_class in classes:
 target_sr = 16000
 
 
-@st.cache_data(ttl=3600)
-def generate_result_dataframe():
+@st.cache_data(ttl=3600, )
+def generate_result_dataframe(files, target_label=None):
     df = pd.DataFrame(
         columns=["File", "General label", "Specific label", "Prediction certainty"]
     )
@@ -138,7 +149,7 @@ def generate_result_dataframe():
 
         specific_label = specific_classes[specific_scores_idx[0]]
 
-        if file[:-4] == specific_label:
+        if file[:-4] in specific_classes and file[:-4] == specific_label or target_label == specific_label:
             certainty = (
                 scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
             )
@@ -162,5 +173,5 @@ def generate_result_dataframe():
     return df
 
 
-df = generate_result_dataframe()
+df = generate_result_dataframe(files, target_label=folder)
 st.write(df)
