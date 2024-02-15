@@ -125,7 +125,7 @@ target_sr = 16000
 @st.cache_data(ttl=3600, )
 def generate_result_dataframe(files, target_label=None):
     df = pd.DataFrame(
-        columns=["File", "General label", "Specific label", "Prediction certainty"]
+        columns=["File", "Target Label", "General label", "Specific label", "Prediction certainty"]
     )
     for file in files:
         resampled_signal, sr = librosa.load(f"/tmp/{file}.wav", sr=target_sr)
@@ -149,7 +149,12 @@ def generate_result_dataframe(files, target_label=None):
 
         specific_label = specific_classes[specific_scores_idx[0]]
 
-        if file[:-4] in specific_classes and file[:-4] == specific_label or target_label == specific_label:
+        if file[:-4] in specific_classes:
+            target_label = file[:-4]
+        elif file[:-6] in specific_classes:
+            target_label = file[:-6]
+
+        if target_label == specific_label:
             certainty = (
                 scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
             )
@@ -163,6 +168,7 @@ def generate_result_dataframe(files, target_label=None):
         s = pd.DataFrame(
             [
                 file,
+                target_label,
                 general_label,
                 specific_label,
                 certainty,
@@ -174,4 +180,9 @@ def generate_result_dataframe(files, target_label=None):
 
 
 df = generate_result_dataframe(files, target_label=folder)
-st.write(df)
+st.write("Results for each file")
+st.dataframe(df)
+
+results = df[['Target Label', 'Prediction certainty']].groupby("Target Label").mean()
+st.write("Average results for each class")
+st.dataframe(results)
