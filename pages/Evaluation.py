@@ -166,12 +166,14 @@ def generate_result_dataframe(files, target_label=None):
             certainty = (
                 scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
             )
-        else:
+        elif target_label in specific_classes:
             tmp_classes = np.array(specific_classes)[specific_scores_idx]
-            idx = np.where(tmp_classes == specific_label)[0][0]
+            idx = np.where(tmp_classes == target_label)[0][0]
             certainty = (
                 scores[scores_idx[0]] * specific_scores[idx] * 100
             )
+        else:
+            certainty = 0
 
         s = pd.DataFrame(
             [
