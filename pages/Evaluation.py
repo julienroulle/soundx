@@ -112,12 +112,20 @@ tflite_model = client.download_file(
     Filename="/tmp/soundx_model_general.tflite",
 )
 
+all_specific_classes = list()
 for model_class in classes:
     tflite_model = client.download_file(
         Bucket="soundx-models",
         Key=f"latest/soundx_model_{model_class}.tflite",
         Filename=f"/tmp/soundx_model_{model_class}.tflite",
     )
+
+    all_specific_classes.extend(json.loads(
+        s3.Object("soundx-models", f"latest/soundx_model_{model_class}.json")
+        .get()["Body"]
+        .read()
+        .decode("utf-8")
+    )["classes"])
 
 target_sr = 16000
 
@@ -149,9 +157,9 @@ def generate_result_dataframe(files, target_label=None):
 
         specific_label = specific_classes[specific_scores_idx[0]]
 
-        if file[:-4] in specific_classes:
+        if file[:-4] in all_specific_classes:
             target_label = file[:-4]
-        elif file[:-6] in specific_classes:
+        elif file[:-6] in all_specific_classes:
             target_label = file[:-6]
 
         if target_label == specific_label:
