@@ -56,6 +56,12 @@ s3 = boto3.resource(
 model_bucket = s3.Bucket("soundx-models")
 dataset_bucket = s3.Bucket("soundx-audio-dataset")
 
+@st.cache_data(ttl=3600)
+def load_models():
+    models = list()
+    for obj in model_bucket.objects.all():
+        models.append(obj.key.split("/")[0])
+    return sorted(list(set(models)))[::-1]
 
 @st.cache_data(ttl=3600)
 def load_folders():
@@ -93,14 +99,20 @@ def load_data(folder=":TESTS"):
             files.append(file)
     return files
 
+models = load_models()
+
+model = st.selectbox("Select a model", models, index=models.index("latest"))
+
 folders = load_folders()
 
 folder = st.selectbox("Select a class", folders, index=folders.index(":TESTS"))
 
 files = load_data(folder)
 
+print(model)
+
 classes = json.loads(
-    s3.Object("soundx-models", "latest/soundx_model_general.json")
+    s3.Object("soundx-models", f"{model}/soundx_model_general.json")
     .get()["Body"]
     .read()
     .decode("utf-8")
@@ -108,7 +120,7 @@ classes = json.loads(
 
 tflite_model = client.download_file(
     Bucket="soundx-models",
-    Key="latest/soundx_model_general.tflite",
+    Key=f"{model}/soundx_model_general.tflite",
     Filename="/tmp/soundx_model_general.tflite",
 )
 
@@ -116,12 +128,12 @@ all_specific_classes = list()
 for model_class in classes:
     tflite_model = client.download_file(
         Bucket="soundx-models",
-        Key=f"latest/soundx_model_{model_class}.tflite",
+        Key=f"{model}/soundx_model_{model_class}.tflite",
         Filename=f"/tmp/soundx_model_{model_class}.tflite",
     )
 
     all_specific_classes.extend(json.loads(
-        s3.Object("soundx-models", f"latest/soundx_model_{model_class}.json")
+        s3.Object("soundx-models", f"{model}/soundx_model_{model_class}.json")
         .get()["Body"]
         .read()
         .decode("utf-8")
@@ -130,8 +142,8 @@ for model_class in classes:
 target_sr = 16000
 
 
-@st.cache_data(ttl=3600, )
-def generate_result_dataframe(files, target_label=None):
+@st.cache_data(ttl=600, )
+def generate_result_dataframe(model, files, target_label=None):
     df = pd.DataFrame(
         columns=["File", "Target Label", "General label", "Specific label", "Prediction certainty"]
     )
@@ -145,7 +157,7 @@ def generate_result_dataframe(files, target_label=None):
         general_label = classes[scores_idx[0]]
 
         specific_classes = json.loads(
-            s3.Object("soundx-models", f"latest/soundx_model_{general_label}.json")
+            s3.Object("soundx-models", f"{model}/soundx_model_{general_label}.json")
             .get()["Body"]
             .read()
             .decode("utf-8")
@@ -189,7 +201,7 @@ def generate_result_dataframe(files, target_label=None):
     return df
 
 
-df = generate_result_dataframe(files, target_label=folder)
+df = generate_result_dataframe(model, files, target_label=folder)
 st.write("Results for each file")
 st.dataframe(df)
 
