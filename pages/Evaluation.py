@@ -179,7 +179,7 @@ def generate_result_dataframe(model, files, target_label=None):
                 scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
             )
         elif target_label in specific_classes:
-            tmp_classes = np.array(specific_classes)[specific_scores_idx]
+            tmp_classes = np.array(specific_classes)
             idx = np.where(tmp_classes == target_label)[0][0]
             certainty = (
                 scores[scores_idx[0]] * specific_scores[idx] * 100
