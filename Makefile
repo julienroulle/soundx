@@ -6,3 +6,6 @@ train:
 
 eval:
 	python src/multi_eval.py
+
+streamlit:
+	streamlit run Soundx.py

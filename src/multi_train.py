@@ -125,7 +125,7 @@ def resample():
     shutil.rmtree("data/interim")
     for root, dirs, files in os.walk(local_directory, topdown=False):
         for f in files:
-            if f.startswith("CLEAN") and f.endswith(".wav"):
+            if f.endswith(".wav"):
                 print(f)
                 new_dir = f'{root.replace("raw", "interim")}'
 
@@ -237,9 +237,6 @@ def train(pd_data, target="label", name=""):
         name=f"soundx_model{name}",
     )
 
-    print(soundx_model.summary())
-    print(class_weights)
-
     soundx_model.compile(
         loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         optimizer=Adam(learning_rate=2e-4),
@@ -254,8 +251,7 @@ def train(pd_data, target="label", name=""):
         train_ds,
         epochs=200,
         validation_data=val_ds,
-        callbacks=callback,  # [callback, CustomCallback()]
-        # class_weight=dict(enumerate(class_weights)),
+        callbacks=callback,
     )
 
     loss, model_accuracy = soundx_model.evaluate(test_ds)
@@ -263,7 +259,7 @@ def train(pd_data, target="label", name=""):
     print("Loss: ", loss)
     print("Accuracy: ", model_accuracy)
 
-    saved_model_path = f"./soundx_model{name}"
+    saved_model_path = f"../models/soundx_model{name}"
 
     input_segment = tf.keras.layers.Input(shape=(), dtype=tf.float32, name="audio")
     embedding_extraction_layer = hub.KerasLayer(
@@ -302,7 +298,7 @@ def train(pd_data, target="label", name=""):
         )
         f.write('{\n    "' + '",\n    "'.join([str(x) for x in my_classes]) + '"\n};')
 
-    with open(f"/tmp/Settings{name}.cpp", "w") as f:
+    with open("/tmp/Settings.cpp", "w") as f:
         f.write('#include "Settings.h"\n\n')
         f.write("/**\n")
         f.write(" * Constructor\n")
@@ -331,7 +327,23 @@ def train(pd_data, target="label", name=""):
                         f.write(",")
                     f.write(" // {}\n".format(settings_value[0]))
             f.write("\t)});\n\n")
-        f.write("}\n\n")
+        f.write("\tallClasses = new char*[Presets.size() + 1];\n")
+        f.write("\tint i =0;\n")
+        f.write(
+            "\tfor (std::map<std::string, PresetSettings>::iterator it = Presets.begin(); it != Presets.end(); ++it) {\n"
+        )
+        f.write("\t\tallClasses[i] = new char[it->first.length() + 1];\n")
+        f.write("\t\tstrcpy(allClasses[i], it->first.c_str());\n")
+        f.write("\t\ti++;\n")
+        f.write("\t}\n")
+        f.write("}\n")
+        f.write("SettingsStruct::~SettingsStruct()\n\n")
+        f.write("{\n")
+        f.write("\tfor (int i = 0; i < Presets.size(); i++) {\n")
+        f.write("\t\tdelete[] allClasses[i];\n")
+        f.write("\t}\n")
+        f.write("\tdelete[] allClasses;\n")
+        f.write("}\n")
 
     s3.meta.client.upload_file(
         f"/tmp/soundx_model{name}.tflite",
@@ -347,7 +359,7 @@ def train(pd_data, target="label", name=""):
         f"/tmp/Classes{name}.h", "soundx-models", f"{today}/Classes{name}.h"
     )
     s3.meta.client.upload_file(
-        f"/tmp/Settings{name}.cpp", "soundx-models", f"{today}/Settings{name}.cpp"
+        "/tmp/Settings.cpp", "soundx-models", f"{today}/Settings.cpp"
     )
 
     s3.meta.client.upload_file(
@@ -364,7 +376,7 @@ def train(pd_data, target="label", name=""):
         f"/tmp/Classes{name}.h", "soundx-models", f"latest/Classes{name}.h"
     )
     s3.meta.client.upload_file(
-        f"/tmp/Settings{name}.cpp", "soundx-models", f"latest/Settings{name}.cpp"
+        "/tmp/Settings.cpp", "soundx-models", "latest/Settings.cpp"
     )
 
 
@@ -375,25 +387,17 @@ if __name__ == "__main__":
 
     pd_data = pd.DataFrame()
     for d in os.listdir(dest_data_path):
-        if d.endswith((".DS_Store", ".json", ".gitkeep")):
+        if d.endswith((".DS_Store", ".json", ".gitkeep")) or d.startswith(":TEST"):
             continue
         for f in os.listdir(f"{dest_data_path}/{d}"):
-            if not f.startswith("CLEAN"):
-                continue
-
             label = d
             category = d.split("_")[0]
             filename = f"{d}/{f}"
-
-            # if category in ["SOURCE-AMBIGUOUS", "THINGS", "NATURAL", "IMPACT"]:
-            #     label = label.replace(category, "MISC")
-            #     category = "MISC"
 
             pd_data = pd.concat(
                 [
                     pd_data,
                     pd.DataFrame(
-                        # [[f"{d}/{f}", d.split("_")[0], d]],
                         [[filename, category, label]],
                         columns=["filename", "category", "label"],
                     ),
@@ -401,9 +405,9 @@ if __name__ == "__main__":
                 axis=0,
             )
 
-    # train(pd_data, target="label")
     train(pd_data, target="category", name="general")
     for group_name, group in pd_data.groupby("category"):
+        print(group_name, len(group))
         train(group, target="label", name=group_name)
 
     validation_sets.to_csv("data/processed/validation_sets.csv")
