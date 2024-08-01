@@ -9,3 +9,6 @@ eval:
 
 streamlit:
 	streamlit run Soundx.py
+
+export-requirements:
+	poetry export -f requirements.txt --output requirements.txt
