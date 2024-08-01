@@ -23,7 +23,7 @@ tensorflow = "^2.15.0"
 modal = "^0.63.98"
 
 [tool.poetry.group.dev.dependencies]
-tensorflow-macos = "^2.15.0"
+tensorflow-macos = "2.15.0"
 
 [build-system]
 requires = ["poetry-core"]
