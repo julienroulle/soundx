@@ -12,3 +12,6 @@ streamlit:
 
 export-requirements:
 	poetry export -f requirements.txt --output requirements.txt
+
+modal-deploy:
+	modal deploy modal_infra.py

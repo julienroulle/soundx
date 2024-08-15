@@ -17,7 +17,6 @@ def train_model():
 def start_training():
     reason = st.text_input("Password")
     if st.button("Submit"):
-        print(reason, os.environ.get("STREAMLIT_PASSWORD"))
         if reason == os.environ.get("STREAMLIT_PASSWORD"):
             st.session_state.training = True
             train_model()
@@ -26,5 +25,4 @@ def start_training():
 
 
 if "training" not in st.session_state:
-    print(os.environ.get("STREAMLIT_PASSWORD"))
     start_training()

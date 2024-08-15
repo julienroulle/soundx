@@ -18,7 +18,10 @@ image = Image.from_registry("tensorflow/tensorflow:2.16.1-gpu").pip_install(
     "tensorflow_io",
     "tensorflow_hub",
     "scikit-learn",
-    "tblib",
+    "soundfile",
+    "loguru",
+    "librosa",
+    "comet_ml",
 )
 app = App(
     "soundx",
@@ -29,6 +32,7 @@ with image.imports():
     # from tensorflow.python.framework.ops import disable_eager_execution
 
     # disable_eager_execution()
+    import comet_ml
 
     import numpy as np
     import pandas as pd
@@ -43,12 +47,199 @@ with image.imports():
     from sklearn.model_selection import KFold
 
 
+def soundx_tflite_prediction(waveform, tflite_model="/tmp/soundx_model.tflite"):
+    # Download the model to yamnet-classification.tflite
+    interpreter = tf.lite.Interpreter(tflite_model)
+
+    input_details = interpreter.get_input_details()
+    waveform_input_index = input_details[0]["index"]
+    output_details = interpreter.get_output_details()
+    scores_output_index = output_details[0]["index"]
+
+    interpreter.resize_tensor_input(waveform_input_index, [waveform.size], strict=False)
+    interpreter.allocate_tensors()
+    interpreter.set_tensor(waveform_input_index, waveform)
+    interpreter.invoke()
+    scores = interpreter.get_tensor(scores_output_index)
+
+    sorted_scores_indices = np.argsort(scores)[::-1]
+    return scores, sorted_scores_indices
+
+
+@app.function(
+    timeout=60 * 60 * 24,
+    image=image,
+    volumes={
+        DATA_PATH: CloudBucketMount(
+            s3_bucket_name,
+            secret=Secret.from_name("s3-bucket-secret"),
+        ),
+        MODEL_PATH: CloudBucketMount(
+            "soundx-models",
+            secret=Secret.from_name("s3-bucket-secret"),
+        ),
+    },
+)
+def generate_general_dataframe(files, date, target_label=None, classes=None):
+    import librosa
+
+    target_sr = 16000
+    path = MODEL_PATH / date
+
+    df = pd.DataFrame(
+        columns=[
+            "File",
+            "Target Label",
+            "General label",
+            "Prediction certainty",
+        ]
+    )
+    for file in files:
+        resampled_signal, sr = librosa.load(file, sr=target_sr)
+
+        scores, scores_idx = soundx_tflite_prediction(
+            resampled_signal, tflite_model=str(path / "soundx_model_general.tflite")
+        )
+
+        general_label = classes[scores_idx[0]]
+
+        target_label = file.split("/")[-2].split("_")[0]
+
+        print(target_label, general_label)
+
+        if target_label == general_label:
+            certainty = scores[scores_idx[0]] * 100
+        elif target_label in classes:
+            tmp_classes = np.array(classes)
+            idx = np.where(tmp_classes == target_label)[0][0]
+            certainty = scores[idx] * 100
+        else:
+            certainty = 0
+
+        s = pd.DataFrame(
+            [
+                file,
+                target_label,
+                general_label,
+                certainty,
+            ],
+            index=df.columns,
+        )
+        df = pd.concat([df, s.T], axis=0)
+    return df
+
+
+@app.function(
+    timeout=60 * 60 * 24,
+    image=image,
+    volumes={
+        DATA_PATH: CloudBucketMount(
+            s3_bucket_name,
+            secret=Secret.from_name("s3-bucket-secret"),
+        ),
+        MODEL_PATH: CloudBucketMount(
+            "soundx-models",
+            secret=Secret.from_name("s3-bucket-secret"),
+        ),
+    },
+)
+def generate_result_dataframe(
+    files, date, target_label=None, classes=None, specific_classes=None
+):
+    import librosa
+
+    target_sr = 16000
+    path = MODEL_PATH / date
+
+    df = pd.DataFrame(
+        columns=[
+            "File",
+            "Target Label",
+            "General label",
+            "Specific label",
+            "Prediction certainty",
+        ]
+    )
+    for file in files:
+        resampled_signal, sr = librosa.load(file, sr=target_sr)
+
+        scores, scores_idx = soundx_tflite_prediction(
+            resampled_signal, tflite_model=str(path / "soundx_model_general.tflite")
+        )
+
+        general_label = classes[scores_idx[0]]
+
+        with open(path / f"soundx_model_{general_label}.json", "r") as f:
+            specific_classes = json.load(f)["classes"]
+
+        specific_scores, specific_scores_idx = soundx_tflite_prediction(
+            resampled_signal,
+            tflite_model=str(path / f"soundx_model_{general_label}.tflite"),
+        )
+
+        specific_label = specific_classes[specific_scores_idx[0]]
+
+        target_label = file.split("/")[-2]
+
+        print(target_label, general_label, specific_label)
+
+        if target_label == specific_label:
+            certainty = (
+                scores[scores_idx[0]] * specific_scores[specific_scores_idx[0]] * 100
+            )
+        elif target_label in specific_classes:
+            tmp_classes = np.array(specific_classes)
+            idx = np.where(tmp_classes == target_label)[0][0]
+            certainty = scores[scores_idx[0]] * specific_scores[idx] * 100
+        else:
+            certainty = 0
+
+        s = pd.DataFrame(
+            [
+                file,
+                target_label,
+                general_label,
+                specific_label,
+                certainty,
+            ],
+            index=df.columns,
+        )
+        df = pd.concat([df, s.T], axis=0)
+    return df
+
+
 @app.function(
     image=image,
     volumes={
         DATA_PATH: CloudBucketMount(
             s3_bucket_name,
             secret=Secret.from_name("s3-bucket-secret"),
+        ),
+    },
+    timeout=60 * 60 * 24,
+)
+def clean_data():
+    import soundfile as sf
+    from loguru import logger
+    import os
+
+    for file in DATA_PATH.rglob("*.wav"):
+        # Check if the file is 16-bit or 24-bit
+        bit_depth = sf.info(file).subtype
+        if bit_depth == "PCM_24":
+            logger.info(f"The file {file} is 24-bit")
+
+            data, samplerate = sf.read(file)
+            sf.write(f"{file[:-4]}_24.wav", data, samplerate, subtype="PCM_16")
+
+            os.remove(file)
+
+
+@app.function(
+    image=image,
+    volumes={
+        DATA_PATH: CloudBucketMount(
+            s3_bucket_name, secret=Secret.from_name("s3-bucket-secret")
         ),
     },
 )
@@ -92,11 +283,12 @@ def load_data():
             secret=Secret.from_name("s3-bucket-secret"),
         ),
     },
-    # gpu="t4",
+    # gpu="l4",
     timeout=60 * 60 * 24,
+    secrets=[Secret.from_name("comet-ml")],
 )
 def train(pd_data, today, target="label", name="", validation_sets=None):
-    path = MODEL_PATH / today
+    exp = comet_ml.Experiment(project_name=f"soundx_model_{name}")
 
     pd_data = pd.read_json(pd_data, orient="columns")
 
@@ -279,6 +471,10 @@ def train(pd_data, today, target="label", name="", validation_sets=None):
     tflite_model = converter.convert()
 
     # Save the model.
+
+    path = MODEL_PATH / today
+    path.mkdir(parents=True, exist_ok=True)
+
     with open(path / f"soundx_model{name}.tflite", "wb") as f:
         f.write(tflite_model)
 
@@ -398,10 +594,89 @@ def train(pd_data, today, target="label", name="", validation_sets=None):
             secret=Secret.from_name("s3-bucket-secret"),
         ),
     },
-    # schedule=Cron("0 14 * * *"),
+)
+def eval(date):
+    import json
+
+    path = MODEL_PATH / date
+    with open(path / "soundx_model_general.json", "r") as f:
+        classes = json.load(f)["classes"]
+
+    all_specific_classes = list()
+    for model_class in classes:
+        with open(path / f"soundx_model_{model_class}.json", "r") as f:
+            all_specific_classes.extend(json.load(f)["classes"])
+
+    files = pd.read_csv(path / "validation_general.csv")["filename"].tolist()
+
+    df = generate_general_dataframe.remote(files, date, classes=classes)
+
+    df.to_csv(str(path / "general_results.csv"))
+
+    results = (
+        df[["Target Label", "Prediction certainty"]].groupby("Target Label").mean()
+    )
+
+    results.to_csv(str(path / "validation_general_results_summary.csv"), index=True)
+
+    files = pd.read_csv(path / "validation_sets.csv")["filename"].tolist()
+
+    df = generate_result_dataframe.remote(files, date, classes=classes)
+
+    df.to_csv(str(path / "validation_sets_results.csv"), index=False)
+
+    results = (
+        df[["Target Label", "Prediction certainty"]].groupby("Target Label").mean()
+    )
+
+    results.to_csv(str(path / "validation_set_results_summary.csv"), index=True)
+
+
+@app.function(
+    timeout=60 * 60 * 24,
+    image=image,
+    volumes={
+        MODEL_PATH: CloudBucketMount(
+            "soundx-models",
+            secret=Secret.from_name("s3-bucket-secret"),
+            read_only=False,
+        ),
+    },
+)
+def copy_to_latest(today):
+    import shutil
+
+    source_path = MODEL_PATH / today
+    destination_path = MODEL_PATH / "latest"
+
+    # # Remove existing 'latest' folder if it exists
+    # if destination_path.exists():
+    #     shutil.rmtree(str(destination_path))
+
+    # Copy the entire 'today' folder to 'latest'
+    try:
+        shutil.copytree(str(source_path), str(destination_path), dirs_exist_ok=True)
+    except Exception as e:
+        pass
+
+    print(f"Copied contents from {source_path} to {destination_path}")
+
+
+@app.function(
+    timeout=60 * 60 * 24,
+    image=image,
+    volumes={
+        MODEL_PATH: CloudBucketMount(
+            "soundx-models",
+            secret=Secret.from_name("s3-bucket-secret"),
+            read_only=False,
+        ),
+    },
+    concurrency_limit=1,
 )
 def main():
     today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    today = "2024-08-13 12:48:20"
 
     path = MODEL_PATH / today
     path.mkdir(parents=True, exist_ok=True)
@@ -426,6 +701,10 @@ def main():
     pd.read_json(validation_sets, orient="columns").to_csv(
         str(path / "validation_sets.csv")
     )
+
+    eval.remote(today)
+
+    copy_to_latest.remote(today)
 
 
 @app.local_entrypoint()
