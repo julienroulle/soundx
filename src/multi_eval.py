@@ -105,9 +105,6 @@ def generate_general_dataframe(files, target_label=None):
 
         target_label = file.split("/")[-2].split("_")[0]
 
-        # if target_label in ["SOURCE-AMBIGUOUS", "THINGS", "NATURAL", "IMPACT"]:
-        #     target_label = "MISC"
-
         print(target_label, general_label)
 
         if target_label == general_label:
