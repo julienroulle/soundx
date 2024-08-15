@@ -56,6 +56,7 @@ s3 = boto3.resource(
 model_bucket = s3.Bucket("soundx-models")
 dataset_bucket = s3.Bucket("soundx-audio-dataset")
 
+
 @st.cache_data(ttl=3600)
 def load_models():
     models = list()
@@ -63,12 +64,14 @@ def load_models():
         models.append(obj.key.split("/")[0])
     return sorted(list(set(models)))[::-1]
 
+
 @st.cache_data(ttl=3600)
 def load_folders():
     folders = list()
     for obj in dataset_bucket.objects.all():
         folders.append(obj.key.split("/")[0])
     return sorted(list(set(folders)))
+
 
 @st.cache_data(ttl=3600)
 def load_data(folder=":TESTS"):
@@ -98,6 +101,7 @@ def load_data(folder=":TESTS"):
                 outfile.writeframes(full_sig)
             files.append(file)
     return files
+
 
 models = load_models()
 
@@ -132,20 +136,30 @@ for model_class in classes:
         Filename=f"/tmp/soundx_model_{model_class}.tflite",
     )
 
-    all_specific_classes.extend(json.loads(
-        s3.Object("soundx-models", f"{model}/soundx_model_{model_class}.json")
-        .get()["Body"]
-        .read()
-        .decode("utf-8")
-    )["classes"])
+    all_specific_classes.extend(
+        json.loads(
+            s3.Object("soundx-models", f"{model}/soundx_model_{model_class}.json")
+            .get()["Body"]
+            .read()
+            .decode("utf-8")
+        )["classes"]
+    )
 
 target_sr = 16000
 
 
-@st.cache_data(ttl=600, )
+@st.cache_data(
+    ttl=600,
+)
 def generate_result_dataframe(model, files, target_label=None):
     df = pd.DataFrame(
-        columns=["File", "Target Label", "General label", "Specific label", "Prediction certainty"]
+        columns=[
+            "File",
+            "Target Label",
+            "General label",
+            "Specific label",
+            "Prediction certainty",
+        ]
     )
     for file in files:
         resampled_signal, sr = librosa.load(f"/tmp/{file}.wav", sr=target_sr)
@@ -181,9 +195,7 @@ def generate_result_dataframe(model, files, target_label=None):
         elif target_label in specific_classes:
             tmp_classes = np.array(specific_classes)
             idx = np.where(tmp_classes == target_label)[0][0]
-            certainty = (
-                scores[scores_idx[0]] * specific_scores[idx] * 100
-            )
+            certainty = scores[scores_idx[0]] * specific_scores[idx] * 100
         else:
             certainty = 0
 
@@ -203,8 +215,8 @@ def generate_result_dataframe(model, files, target_label=None):
 
 df = generate_result_dataframe(model, files, target_label=folder)
 st.write("Results for each file")
-st.dataframe(df)
+st.dataframe(df, use_container_width=True)
 
-results = df[['Target Label', 'Prediction certainty']].groupby("Target Label").mean()
+results = df[["Target Label", "Prediction certainty"]].groupby("Target Label").mean()
 st.write("Average results for each class")
-st.dataframe(results)
+st.dataframe(results, use_container_width=True)
