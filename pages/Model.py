@@ -114,13 +114,6 @@ except wave.Error:
 
 # st.audio(audio_file.read(), format='audio/wav')
 
-classes = json.loads(
-    s3.Object("soundx-models", f"{model}/soundx_model.json")
-    .get()["Body"]
-    .read()
-    .decode("utf-8")
-)["classes"]
-
 
 def soundx_tflite_prediction(waveform, tflite_model="/tmp/soundx_model.tflite"):
     # Download the model to yamnet-classification.tflite
@@ -144,22 +137,9 @@ def soundx_tflite_prediction(waveform, tflite_model="/tmp/soundx_model.tflite"):
 target_sr = 16000
 resampled_signal, sr = librosa.load("/tmp/export.wav", sr=target_sr)
 
-tflite_model = client.download_file(
-    Bucket="soundx-models",
-    Key=f"{model}/soundx_model.tflite",
-    Filename="/tmp/soundx_model.tflite",
-)
-scores, scores_idx = soundx_tflite_prediction(resampled_signal)
+predictions_columns = st.columns([2, 3, 3])
 
-predictions_columns = st.columns([3, 2, 3, 3])
-predictions_columns[0].subheader("Prediction")
-
-for idx in range(5):
-    predictions_columns[0].metric(
-        classes[scores_idx[idx]], f"{scores[scores_idx[idx]] * 100:.1f} %"
-    )
-
-predictions_columns[1].subheader("General Prediction")
+predictions_columns[0].subheader("General Prediction")
 tflite_model = client.download_file(
     Bucket="soundx-models",
     Key=f"{model}/soundx_model_general.tflite",
@@ -177,13 +157,13 @@ scores, scores_idx = soundx_tflite_prediction(
 )
 
 for idx in range(5):
-    predictions_columns[1].metric(
+    predictions_columns[0].metric(
         classes[scores_idx[idx]], f"{scores[scores_idx[idx]] * 100:.1f} %"
     )
 
 general_label, second_label = classes[scores_idx[0]], classes[scores_idx[1]]
 
-predictions_columns[2].subheader("Specific Prediction 1st label")
+predictions_columns[1].subheader("Specific Prediction 1st label")
 tflite_model = client.download_file(
     Bucket="soundx-models",
     Key=f"{model}/soundx_model_{general_label}.tflite",
@@ -201,11 +181,11 @@ scores, scores_idx = soundx_tflite_prediction(
 )
 
 for idx in range(5):
-    predictions_columns[2].metric(
+    predictions_columns[1].metric(
         classes[scores_idx[idx]], f"{scores[scores_idx[idx]] * 100:.1f} %"
     )
 
-predictions_columns[3].subheader("Specific Prediction 2nd label")
+predictions_columns[2].subheader("Specific Prediction 2nd label")
 tflite_model = client.download_file(
     Bucket="soundx-models",
     Key=f"{model}/soundx_model_{second_label}.tflite",
@@ -223,6 +203,6 @@ scores, scores_idx = soundx_tflite_prediction(
 )
 
 for idx in range(5):
-    predictions_columns[3].metric(
+    predictions_columns[2].metric(
         classes[scores_idx[idx]], f"{scores[scores_idx[idx]] * 100:.1f} %"
     )

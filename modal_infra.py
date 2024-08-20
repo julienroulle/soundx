@@ -676,7 +676,6 @@ def copy_to_latest(today):
 )
 def main():
     today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    today = "2024-08-13 12:48:20"
 
     path = MODEL_PATH / today
     path.mkdir(parents=True, exist_ok=True)
