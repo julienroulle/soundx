@@ -21,6 +21,7 @@ ipykernel = "^6.27.1"
 ipywidgets = "^8.1.1"
 tensorflow = "^2.15.0"
 modal = "^0.63.98"
+pydub = "^0.25.1"
 
 [tool.poetry.group.dev.dependencies]
 tensorflow-macos = "2.15.0"

@@ -9,7 +9,7 @@ import boto3
 import librosa
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
+import pydub
 
 from dotenv import find_dotenv, load_dotenv
 import os
@@ -66,8 +66,10 @@ col1, col2 = st.columns([3, 2])
 
 with col1:
     label = st.selectbox("Select label", files)
+    label_2 = st.selectbox("Select second label (optional)", files, index=None)
 with col2:
     file = st.selectbox("Select file", files[label])
+    file_2 = st.selectbox("Select second file (optional)", files[label_2], index=None)
 
 uploaded_file = st.file_uploader("Upload a file")
 print(uploaded_file, uploaded_file is not None)
@@ -82,37 +84,52 @@ else:
     content = BytesIO(requests.get(url).content)
     signal_wave = wave.open(content, "r")
 
-try:
-    frames = signal_wave.getnframes()
-    rate = signal_wave.getframerate()
-    samp_width = signal_wave.getsampwidth()
-    n_channels = signal_wave.getnchannels()
-    full_sig = np.frombuffer(signal_wave.readframes(frames), dtype=np.int16)
-    sig = full_sig[::n_channels]
+    try:
+        frames = signal_wave.getnframes()
+        rate = signal_wave.getframerate()
+        samp_width = signal_wave.getsampwidth()
+        n_channels = signal_wave.getnchannels()
+        full_sig = np.frombuffer(signal_wave.readframes(frames), dtype=np.int16)
+        sig = full_sig[::n_channels]
 
-    with wave.open("/tmp/export.wav", "w") as outfile:
-        outfile.setnchannels(n_channels)
-        outfile.setsampwidth(samp_width)
-        outfile.setframerate(rate)
-        outfile.setnframes(int(len(full_sig) / samp_width))
-        outfile.writeframes(full_sig)
+        with wave.open("/tmp/export.wav", "w") as outfile:
+            outfile.setnchannels(n_channels)
+            outfile.setsampwidth(samp_width)
+            outfile.setframerate(rate)
+            outfile.setnframes(int(len(full_sig) / samp_width))
+            outfile.writeframes(full_sig)
 
-    duration = frames / float(rate)
-except wave.Error:
-    sig = []
+        duration = frames / float(rate)
+    except wave.Error:
+        sig = []
 
-# audio_file = BytesIO(requests.get(url).content)
+    if file_2 is not None:
+        url = client.generate_presigned_url(
+            ClientMethod="get_object",
+            Params={"Bucket": "soundx-audio-dataset", "Key": f"{label_2}/{file_2}"},
+            ExpiresIn=3600,
+        )
+        content = BytesIO(requests.get(url).content)
+        signal_wave = wave.open(content, "r")
 
-# # create waveform plot
-# fig = plt.figure(figsize=(10, 3))
-# ax = fig.add_subplot(111)
-# ax.plot(sig)
-# ax.set_xlim([0, len(sig)])
-# ax.set_xlabel('Time [s]')
-# ax.set_ylabel('Amplitude')
-# st.pyplot(fig)
+        try:
+            frames = signal_wave.getnframes()
+            rate = signal_wave.getframerate()
+            samp_width = signal_wave.getsampwidth()
+            n_channels = signal_wave.getnchannels()
+            full_sig = np.frombuffer(signal_wave.readframes(frames), dtype=np.int16)
+            sig = full_sig[::n_channels]
 
-# st.audio(audio_file.read(), format='audio/wav')
+            with wave.open("/tmp/export_2.wav", "w") as outfile:
+                outfile.setnchannels(n_channels)
+                outfile.setsampwidth(samp_width)
+                outfile.setframerate(rate)
+                outfile.setnframes(int(len(full_sig) / samp_width))
+                outfile.writeframes(full_sig)
+
+            duration = frames / float(rate)
+        except wave.Error:
+            sig = []
 
 
 def soundx_tflite_prediction(waveform, tflite_model="/tmp/soundx_model.tflite"):
@@ -135,7 +152,21 @@ def soundx_tflite_prediction(waveform, tflite_model="/tmp/soundx_model.tflite"):
 
 
 target_sr = 16000
-resampled_signal, sr = librosa.load("/tmp/export.wav", sr=target_sr)
+
+if file_2 is not None:
+    sound1 = pydub.AudioSegment.from_file("/tmp/export.wav", format="wav")
+    sound2 = pydub.AudioSegment.from_file("/tmp/export_2.wav", format="wav")
+
+    overlay = sound1.overlay(sound2, position=0)
+
+    file_handle = overlay.export("/tmp/output.wav", format="wav")
+
+    resampled_signal, sr = librosa.load("/tmp/output.wav", sr=target_sr)
+    st.audio("/tmp/output.wav", format="audio/wav")
+else:
+    resampled_signal, sr = librosa.load("/tmp/export.wav", sr=target_sr)
+    st.audio("/tmp/export.wav", format="audio/wav")
+
 
 predictions_columns = st.columns([2, 3, 3])
 
